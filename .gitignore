@@ -1,0 +1,81 @@
+# ------------------------------------------------------------
+# .NET & Visual Studio
+# ------------------------------------------------------------
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Auto-generated build files
+project.lock.json
+project.fragment.lock.json
+
+# VS Code / JetBrains IDEs
+.vscode/
+.idea/
+
+# Build outputs from dotnet publish
+**/publish/
+**/Release/
+**/Debug/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.old
+*.cache
+*.log
+
+# ------------------------------------------------------------
+# Windows
+# ------------------------------------------------------------
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------------------------------
+# Packaging
+# ------------------------------------------------------------
+# Don’t commit compiled EXEs or installers
+*.exe
+*.dll
+*.msi
+*.appx
+*.zip
+*.7z
+
+# ------------------------------------------------------------
+# Tooling
+# ------------------------------------------------------------
+# Rider / ReSharper
+_ReSharper*/
+*.DotSettings.user
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# DotCover
+*.dotCover
+
+# ------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------
+*.swp
+*.swo
+*.DS_Store
+
+# Local distribution folder (your build.ps1 output)
+dist/
