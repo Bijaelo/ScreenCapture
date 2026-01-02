@@ -34,3 +34,10 @@ Goal: address post-implementation feedback on window naming/highlight, layout, p
 - Hide hotkey input/add/remove/list while “Any key” is selected; show them only when “Any key” is unchecked.
 - After clicking “Add,” return focus to the hotkey input to streamline adding multiple combos.
 - Keep “Remove” enabled whenever “Any key” is unchecked and the list has entries; disable it otherwise. Tie the enablement to both the checkbox state and list change events.
+
+## Responsive form sizing
+- Switch manual sizing to layout-driven sizing: wrap the main sections (folder row, trigger group, target group, start button) in a top-level `TableLayoutPanel` with `AutoSize=true` and `AutoSizeMode=GrowAndShrink`, and remove hard-coded `Form.Height` adjustments.
+- Inside the trigger group, place a `TableLayoutPanel` or `FlowLayoutPanel` for hotkey controls, also with `AutoSize=true`; when hotkey controls are hidden (Any key checked), the panel collapses and the group height shrinks automatically.
+- Similarly, in the target group, place screen/window selectors in their own auto-sizing panel so only the visible selector consumes space.
+- Anchor/dock controls instead of absolute `Left/Top` where practical; call `PerformLayout()` after visibility toggles so the form recomputes size.
+- Set `MinimumSize` for the form to avoid collapse, and optionally limit `MaximumSize` to prevent runaway growth if many hotkeys are listed.
