@@ -176,10 +176,10 @@ namespace TransparentScreenCapture
             txtHotkey.KeyDown += Hotkey_KeyDown;
             txtHotkey.GotFocus += (s, e) => txtHotkey.Text = "Press keys...";
             txtHotkey.LostFocus += (s, e) => RefreshHotkeyText();
-            btnAddHotkey.Click += (s, e) => AddPendingHotkey();
+            btnAddHotkey.Click += (s, e) => { AddPendingHotkey(); txtHotkey.Focus(); };
             btnRemoveHotkey.Click += (s, e) => RemoveSelectedHotkey();
             btnClearHotkey.Click += (s, e) => { hotkeys.Clear(); pendingHotkey = null; RefreshHotkeyText(); RefreshHotkeyList(); };
-            chkAnyKey.CheckedChanged += (s, e) => { captureAnyKey = chkAnyKey.Checked; RefreshHotkeyState(); };
+            chkAnyKey.CheckedChanged += (s, e) => { captureAnyKey = chkAnyKey.Checked; RefreshHotkeyState(); UpdateMode(); };
             tbSeconds.Scroll += (s, e) => lblSecVal.Text = tbSeconds.Value + "s";
 
             btnStart.Click += (s, e) => StartCaptureFromUI();
@@ -242,16 +242,16 @@ namespace TransparentScreenCapture
             tbSeconds.Enabled = interval;
 
             lblHotkey.Visible = keyboard;
-            txtHotkey.Visible = keyboard;
-            btnAddHotkey.Visible = keyboard;
-            btnRemoveHotkey.Visible = keyboard;
-            btnClearHotkey.Visible = keyboard;
-            lstHotkeys.Visible = keyboard;
             chkAnyKey.Visible = keyboard;
-            txtHotkey.Enabled = keyboard;
-            btnAddHotkey.Enabled = keyboard;
-            btnRemoveHotkey.Enabled = keyboard;
-            btnClearHotkey.Enabled = keyboard;
+            txtHotkey.Visible = keyboard && !captureAnyKey;
+            btnAddHotkey.Visible = keyboard && !captureAnyKey;
+            btnRemoveHotkey.Visible = keyboard && !captureAnyKey;
+            btnClearHotkey.Visible = keyboard && !captureAnyKey;
+            lstHotkeys.Visible = keyboard && !captureAnyKey;
+            txtHotkey.Enabled = keyboard && !captureAnyKey;
+            btnAddHotkey.Enabled = keyboard && !captureAnyKey;
+            btnRemoveHotkey.Enabled = keyboard && !captureAnyKey && lstHotkeys.Items.Count > 0;
+            btnClearHotkey.Enabled = keyboard && !captureAnyKey;
             chkAnyKey.Enabled = keyboard;
         }
 
@@ -726,12 +726,17 @@ namespace TransparentScreenCapture
 
         private void RefreshHotkeyState()
         {
-            bool enabled = !captureAnyKey;
+            bool enabled = !captureAnyKey && mode == CaptureMode.Keyboard;
             txtHotkey.Enabled = enabled;
             btnAddHotkey.Enabled = enabled;
-            btnRemoveHotkey.Enabled = enabled && lstHotkeys.SelectedItem != null;
+            btnRemoveHotkey.Enabled = enabled && lstHotkeys.Items.Count > 0;
             btnClearHotkey.Enabled = enabled;
             lstHotkeys.Enabled = enabled;
+            btnRemoveHotkey.Visible = enabled;
+            btnClearHotkey.Visible = enabled;
+            btnAddHotkey.Visible = enabled;
+            txtHotkey.Visible = enabled;
+            lstHotkeys.Visible = enabled;
         }
 
         private bool EnsureValidScreenSelection(bool fallback)
