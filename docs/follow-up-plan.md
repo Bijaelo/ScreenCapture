@@ -29,3 +29,8 @@ Goal: address post-implementation feedback on window naming/highlight, layout, p
 3) Implement hover highlight for window dropdown items.
 4) Add multi-hotkey list UI + logic with validation.
 5) Manual verification: layout with all modes/targets, picker on external windows, hover highlight, minimized start/stop, multi-hotkey trigger matching.
+
+## Additional UI polish (hotkey controls)
+- Hide hotkey input/add/remove/list while “Any key” is selected; show them only when “Any key” is unchecked.
+- After clicking “Add,” return focus to the hotkey input to streamline adding multiple combos.
+- Keep “Remove” enabled whenever “Any key” is unchecked and the list has entries; disable it otherwise. Tie the enablement to both the checkbox state and list change events.
