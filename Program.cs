@@ -54,6 +54,7 @@ namespace TransparentScreenCapture
             UseVisualStyleBackColor = true
         };
         private readonly Label lblHotkey = new Label { Text = "Hotkey:", AutoSize = true };
+        private readonly CheckBox chkAnyKey = new CheckBox { Text = "Any key (default)", AutoSize = true, Checked = true };
         private readonly TextBox txtHotkey = new TextBox { ReadOnly = true, Width = 200 };
         private readonly Button btnAddHotkey = new Button { Text = "Add", Width = 50 };
         private readonly Button btnRemoveHotkey = new Button { Text = "Remove", Width = 70 };
@@ -96,6 +97,7 @@ namespace TransparentScreenCapture
         private DateTime lastWindowCaptureSuccess = DateTime.UtcNow;
         private IntPtr lastHoverHandle = IntPtr.Zero;
         private Rectangle lastHoverRect = Rectangle.Empty;
+        private bool captureAnyKey = true;
 
         public MainForm()
         {
@@ -111,7 +113,8 @@ namespace TransparentScreenCapture
             txtFolder.Left = 15; txtFolder.Top = 35;
             btnBrowse.Left = 380; btnBrowse.Top = 33; btnBrowse.Width = 80;
 
-            grpMode.Left = 15; grpMode.Top = 75;
+            int y = 75;
+            grpMode.Left = 15; grpMode.Top = y;
             grpMode.Controls.Add(rbInterval);
             grpMode.Controls.Add(rbMouseClick);
             grpMode.Controls.Add(rbKeyboard);
@@ -119,13 +122,15 @@ namespace TransparentScreenCapture
             grpMode.Controls.Add(tbSeconds);
             grpMode.Controls.Add(lblSecVal);
             grpMode.Controls.Add(lblHotkey);
+            grpMode.Controls.Add(chkAnyKey);
             grpMode.Controls.Add(txtHotkey);
             grpMode.Controls.Add(btnAddHotkey);
             grpMode.Controls.Add(btnRemoveHotkey);
             grpMode.Controls.Add(btnClearHotkey);
             grpMode.Controls.Add(lstHotkeys);
 
-            grpTarget.Left = 15; grpTarget.Top = 190;
+            y += grpMode.Height + 10;
+            grpTarget.Left = 15; grpTarget.Top = y;
             grpTarget.Controls.Add(rbTargetAll);
             grpTarget.Controls.Add(rbTargetScreen);
             grpTarget.Controls.Add(rbTargetWindow);
@@ -134,7 +139,8 @@ namespace TransparentScreenCapture
             grpTarget.Controls.Add(btnRefreshWindows);
             grpTarget.Controls.Add(btnPickWindow);
 
-            btnStart.Left = 365; btnStart.Top = 430;
+            y += grpTarget.Height + 10;
+            btnStart.Left = 365; btnStart.Top = y;
 
             Controls.Add(lblFolder);
             Controls.Add(txtFolder);
@@ -161,17 +167,19 @@ namespace TransparentScreenCapture
             rbMouseClick.Location = new Point(120, 25);
             rbKeyboard.Location = new Point(220, 25);
             lblHotkey.Left = 10; lblHotkey.Top = 60;
-            txtHotkey.Left = 65; txtHotkey.Top = 55;
-            btnAddHotkey.Left = 275; btnAddHotkey.Top = 55;
-            btnRemoveHotkey.Left = 330; btnRemoveHotkey.Top = 55;
-            btnClearHotkey.Left = 330; btnClearHotkey.Top = 85;
-            lstHotkeys.Left = 65; lstHotkeys.Top = 90;
+            chkAnyKey.Left = 65; chkAnyKey.Top = 55;
+            txtHotkey.Left = 65; txtHotkey.Top = 80;
+            btnAddHotkey.Left = 275; btnAddHotkey.Top = 78;
+            btnRemoveHotkey.Left = 330; btnRemoveHotkey.Top = 78;
+            btnClearHotkey.Left = 330; btnClearHotkey.Top = 110;
+            lstHotkeys.Left = 65; lstHotkeys.Top = 115;
             txtHotkey.KeyDown += Hotkey_KeyDown;
             txtHotkey.GotFocus += (s, e) => txtHotkey.Text = "Press keys...";
             txtHotkey.LostFocus += (s, e) => RefreshHotkeyText();
             btnAddHotkey.Click += (s, e) => AddPendingHotkey();
             btnRemoveHotkey.Click += (s, e) => RemoveSelectedHotkey();
             btnClearHotkey.Click += (s, e) => { hotkeys.Clear(); pendingHotkey = null; RefreshHotkeyText(); RefreshHotkeyList(); };
+            chkAnyKey.CheckedChanged += (s, e) => { captureAnyKey = chkAnyKey.Checked; RefreshHotkeyState(); };
             tbSeconds.Scroll += (s, e) => lblSecVal.Text = tbSeconds.Value + "s";
 
             btnStart.Click += (s, e) => StartCaptureFromUI();
@@ -217,6 +225,7 @@ namespace TransparentScreenCapture
             UpdateMode();
             RefreshHotkeyText();
             RefreshHotkeyList();
+            RefreshHotkeyState();
         }
 
         private void UpdateMode()
@@ -238,10 +247,12 @@ namespace TransparentScreenCapture
             btnRemoveHotkey.Visible = keyboard;
             btnClearHotkey.Visible = keyboard;
             lstHotkeys.Visible = keyboard;
+            chkAnyKey.Visible = keyboard;
             txtHotkey.Enabled = keyboard;
             btnAddHotkey.Enabled = keyboard;
             btnRemoveHotkey.Enabled = keyboard;
             btnClearHotkey.Enabled = keyboard;
+            chkAnyKey.Enabled = keyboard;
         }
 
         private void LayoutTargetControls()
@@ -298,7 +309,7 @@ namespace TransparentScreenCapture
                 RefreshWindows();
             }
 
-            if (mode == CaptureMode.Keyboard && hotkeys.Count == 0)
+            if (mode == CaptureMode.Keyboard && !captureAnyKey && hotkeys.Count == 0)
             {
                 MessageBox.Show("Set a hotkey for keystroke capture first.", "Hotkey required",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -417,7 +428,12 @@ namespace TransparentScreenCapture
 
         private void OnGlobalKeyPressed(Keys key, bool ctrl, bool alt, bool shift)
         {
-            if (hotkeys.Any(h => h.Matches(key, ctrl, alt, shift)))
+            if (captureAnyKey)
+            {
+                if (key == Keys.ControlKey || key == Keys.Menu || key == Keys.ShiftKey) return;
+                CaptureTargets();
+            }
+            else if (hotkeys.Any(h => h.Matches(key, ctrl, alt, shift)))
             {
                 CaptureTargets();
             }
@@ -705,6 +721,17 @@ namespace TransparentScreenCapture
             {
                 lstHotkeys.Items.Add(hk);
             }
+            RefreshHotkeyState();
+        }
+
+        private void RefreshHotkeyState()
+        {
+            bool enabled = !captureAnyKey;
+            txtHotkey.Enabled = enabled;
+            btnAddHotkey.Enabled = enabled;
+            btnRemoveHotkey.Enabled = enabled && lstHotkeys.SelectedItem != null;
+            btnClearHotkey.Enabled = enabled;
+            lstHotkeys.Enabled = enabled;
         }
 
         private bool EnsureValidScreenSelection(bool fallback)
