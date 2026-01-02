@@ -29,7 +29,7 @@ namespace TransparentScreenCapture
         private readonly Label lblFolder = new Label { Text = "Destination folder:", AutoSize = true };
         private readonly TextBox txtFolder = new TextBox { ReadOnly = true, Width = 360 };
         private readonly Button btnBrowse = new Button { Text = "Browse..." };
-        private readonly GroupBox grpMode = new GroupBox { Text = "Trigger", Width = 430, Height = 200 };
+        private readonly GroupBox grpMode = new GroupBox { Text = "Trigger", Width = 430, Height = 230 };
         private readonly RadioButton rbInterval = new RadioButton
         {
             Text = "Interval",
@@ -171,8 +171,8 @@ namespace TransparentScreenCapture
             txtHotkey.Left = 65; txtHotkey.Top = 80;
             btnAddHotkey.Left = 275; btnAddHotkey.Top = 78;
             btnRemoveHotkey.Left = 330; btnRemoveHotkey.Top = 78;
-            btnClearHotkey.Left = 330; btnClearHotkey.Top = 110;
-            lstHotkeys.Left = 65; lstHotkeys.Top = 115;
+            btnClearHotkey.Left = 65; btnClearHotkey.Top = 195;
+            lstHotkeys.Left = 65; lstHotkeys.Top = 120;
             txtHotkey.KeyDown += Hotkey_KeyDown;
             txtHotkey.GotFocus += (s, e) => txtHotkey.Text = "Press keys...";
             txtHotkey.LostFocus += (s, e) => RefreshHotkeyText();
