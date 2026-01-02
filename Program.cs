@@ -28,7 +28,7 @@ namespace TransparentScreenCapture
         private readonly Label lblFolder = new Label { Text = "Destination folder:", AutoSize = true };
         private readonly TextBox txtFolder = new TextBox { ReadOnly = true, Width = 360 };
         private readonly Button btnBrowse = new Button { Text = "Browse..." };
-        private readonly GroupBox grpMode = new GroupBox { Text = "Trigger", Width = 430, Height = 90 };
+        private readonly GroupBox grpMode = new GroupBox { Text = "Trigger", Width = 430, Height = 140 };
         private readonly RadioButton rbInterval = new RadioButton
         {
             Text = "Interval",
@@ -61,13 +61,14 @@ namespace TransparentScreenCapture
         private readonly Label lblSecVal = new Label { Text = "5s", Left = 400, Top = 55, AutoSize = true };
         private readonly Button btnStart = new Button { Text = "Start", Width = 100, Height = 36 };
 
-        private readonly GroupBox grpTarget = new GroupBox { Text = "Capture Target", Width = 430, Height = 120 };
+        private readonly GroupBox grpTarget = new GroupBox { Text = "Capture Target", Width = 430, Height = 150 };
         private readonly RadioButton rbTargetAll = new RadioButton { Text = "All screens", Checked = true, AutoSize = true };
         private readonly RadioButton rbTargetScreen = new RadioButton { Text = "Specific screen", AutoSize = true };
         private readonly RadioButton rbTargetWindow = new RadioButton { Text = "Window", AutoSize = true };
         private readonly ComboBox cbScreens = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false, Width = 280 };
         private readonly ComboBox cbWindows = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false, Width = 280 };
         private readonly Button btnRefreshWindows = new Button { Text = "Refresh", Enabled = false, Width = 70 };
+        private readonly Button btnPickWindow = new Button { Text = "Pick...", Enabled = false, Width = 60 };
 
         private readonly NotifyIcon tray = new NotifyIcon();
         private readonly ContextMenuStrip trayMenu = new ContextMenuStrip();
@@ -79,11 +80,15 @@ namespace TransparentScreenCapture
         private readonly System.Windows.Forms.Timer intervalTimer = new System.Windows.Forms.Timer();
         private LowLevelMouseHook? mouseHook;
         private LowLevelKeyboardHook? keyboardHook;
+        private LowLevelMouseHook? pickHook;
 
         private string baseFolder = "";
         private CaptureMode mode = CaptureMode.Interval;
         private CaptureTargetType targetType = CaptureTargetType.AllScreens;
         private HotkeyBinding? hotkey;
+        private bool isPickingWindow;
+        private int windowSkipCount;
+        private DateTime lastWindowCaptureSuccess = DateTime.UtcNow;
 
         public MainForm()
         {
@@ -92,7 +97,7 @@ namespace TransparentScreenCapture
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             Width = 480;
-            Height = 420;
+            Height = 480;
 
             // Layout
             lblFolder.Left = 15; lblFolder.Top = 15;
@@ -117,8 +122,9 @@ namespace TransparentScreenCapture
             grpTarget.Controls.Add(cbScreens);
             grpTarget.Controls.Add(cbWindows);
             grpTarget.Controls.Add(btnRefreshWindows);
+            grpTarget.Controls.Add(btnPickWindow);
 
-            btnStart.Left = 365; btnStart.Top = 330;
+            btnStart.Left = 365; btnStart.Top = 380;
 
             Controls.Add(lblFolder);
             Controls.Add(txtFolder);
@@ -144,9 +150,9 @@ namespace TransparentScreenCapture
             rbInterval.Location = new Point(10, 25);
             rbMouseClick.Location = new Point(120, 25);
             rbKeyboard.Location = new Point(220, 25);
-            lblHotkey.Left = 10; lblHotkey.Top = 55;
-            txtHotkey.Left = 65; txtHotkey.Top = 50;
-            btnClearHotkey.Left = 275; btnClearHotkey.Top = 50;
+            lblHotkey.Left = 10; lblHotkey.Top = 60;
+            txtHotkey.Left = 65; txtHotkey.Top = 55;
+            btnClearHotkey.Left = 275; btnClearHotkey.Top = 55;
             txtHotkey.KeyDown += Hotkey_KeyDown;
             txtHotkey.GotFocus += (s, e) => txtHotkey.Text = "Press keys...";
             txtHotkey.LostFocus += (s, e) => RefreshHotkeyText();
@@ -176,8 +182,11 @@ namespace TransparentScreenCapture
             rbTargetScreen.CheckedChanged += (s, e) => UpdateTargetUI();
             rbTargetWindow.CheckedChanged += (s, e) => UpdateTargetUI();
             btnRefreshWindows.Click += (s, e) => RefreshWindows();
+            btnPickWindow.Click += (s, e) => BeginWindowPick();
             cbScreens.SelectedIndexChanged += (s, e) => UpdateTargetUI();
             cbWindows.SelectedIndexChanged += (s, e) => UpdateTargetUI();
+            cbScreens.DropDown += (s, e) => RefreshScreens();
+            cbWindows.DropDown += (s, e) => RefreshWindows();
 
             LayoutTargetControls();
             RefreshScreens();
@@ -194,9 +203,19 @@ namespace TransparentScreenCapture
             mode = rbInterval.Checked ? CaptureMode.Interval
                 : rbMouseClick.Checked ? CaptureMode.MouseClick
                 : CaptureMode.Keyboard;
-            tbSeconds.Enabled = mode == CaptureMode.Interval;
-            txtHotkey.Enabled = mode == CaptureMode.Keyboard;
-            btnClearHotkey.Enabled = mode == CaptureMode.Keyboard;
+            bool interval = mode == CaptureMode.Interval;
+            bool keyboard = mode == CaptureMode.Keyboard;
+
+            lblSeconds.Visible = interval;
+            tbSeconds.Visible = interval;
+            lblSecVal.Visible = interval;
+            tbSeconds.Enabled = interval;
+
+            lblHotkey.Visible = keyboard;
+            txtHotkey.Visible = keyboard;
+            btnClearHotkey.Visible = keyboard;
+            txtHotkey.Enabled = keyboard;
+            btnClearHotkey.Enabled = keyboard;
         }
 
         private void LayoutTargetControls()
@@ -204,9 +223,10 @@ namespace TransparentScreenCapture
             rbTargetAll.Location = new Point(10, 25);
             rbTargetScreen.Location = new Point(120, 25);
             cbScreens.Left = 25; cbScreens.Top = 55;
-            rbTargetWindow.Location = new Point(10, 85);
-            cbWindows.Left = 120; cbWindows.Top = 83;
-            btnRefreshWindows.Left = 320; btnRefreshWindows.Top = 83;
+            rbTargetWindow.Location = new Point(10, 90);
+            cbWindows.Left = 120; cbWindows.Top = 88;
+            btnRefreshWindows.Left = 320; btnRefreshWindows.Top = 88;
+            btnPickWindow.Left = 330; btnPickWindow.Top = 55;
         }
 
         private void UpdateTargetUI()
@@ -218,6 +238,7 @@ namespace TransparentScreenCapture
             cbScreens.Enabled = rbTargetScreen.Checked;
             cbWindows.Enabled = rbTargetWindow.Checked;
             btnRefreshWindows.Enabled = rbTargetWindow.Checked;
+            btnPickWindow.Enabled = rbTargetWindow.Checked;
         }
 
         private void StartCaptureFromUI()
@@ -227,6 +248,16 @@ namespace TransparentScreenCapture
                 MessageBox.Show("Please choose a destination folder first.", "Folder required",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
+            }
+
+            if (targetType == CaptureTargetType.SingleScreen)
+            {
+                RefreshScreens();
+            }
+
+            if (targetType == CaptureTargetType.Window)
+            {
+                RefreshWindows();
             }
 
             if (mode == CaptureMode.Keyboard && hotkey == null)
@@ -242,6 +273,7 @@ namespace TransparentScreenCapture
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            EnsureValidScreenSelection(fallback: true);
 
             if (targetType == CaptureTargetType.Window && cbWindows.SelectedItem is not WindowItem)
             {
@@ -283,6 +315,9 @@ namespace TransparentScreenCapture
                 : mode == CaptureMode.MouseClick ? "Capturing on mouse clicks."
                 : "Capturing on configured keystrokes.";
             tray.ShowBalloonTip(2000);
+
+            lastWindowCaptureSuccess = DateTime.UtcNow;
+            windowSkipCount = 0;
         }
 
         private void StopCapture()
@@ -352,6 +387,7 @@ namespace TransparentScreenCapture
 
         private void CaptureTargets()
         {
+            if (isPickingWindow) return;
             try
             {
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss.fff");
@@ -388,7 +424,15 @@ namespace TransparentScreenCapture
 
         private void CaptureSelectedScreen(string timestamp)
         {
-            if (cbScreens.SelectedIndex < 0) return;
+            if (!EnsureValidScreenSelection(fallback: false))
+            {
+                StopCapture();
+                tray.BalloonTipTitle = "Capture stopped";
+                tray.BalloonTipText = "Selected screen is unavailable.";
+                tray.ShowBalloonTip(2000);
+                return;
+            }
+
             var selected = cbScreens.SelectedItem as ScreenItem;
             if (selected == null) return;
             CaptureScreen(selected.Screen, selected.Index, timestamp);
@@ -419,6 +463,21 @@ namespace TransparentScreenCapture
                 tray.BalloonTipTitle = "Capture Error";
                 tray.BalloonTipText = "Selected window is no longer available.";
                 tray.ShowBalloonTip(2000);
+                return;
+            }
+
+            if (IsIconic(win.Handle))
+            {
+                windowSkipCount++;
+                var elapsed = DateTime.UtcNow - lastWindowCaptureSuccess;
+                if (windowSkipCount >= 3 && elapsed > TimeSpan.FromMinutes(5))
+                {
+                    StopCapture();
+                    tray.BalloonTipTitle = "Capture stopped";
+                    tray.BalloonTipText = "Window minimized for 5+ minutes. Stopping capture.";
+                    tray.ShowBalloonTip(2000);
+                    Application.Exit();
+                }
                 return;
             }
 
@@ -475,24 +534,32 @@ namespace TransparentScreenCapture
             if (!System.IO.Directory.Exists(folder)) System.IO.Directory.CreateDirectory(folder);
             string file = System.IO.Path.Combine(folder, $"{timestamp}.png");
             bmp.Save(file, ImageFormat.Png);
+            lastWindowCaptureSuccess = DateTime.UtcNow;
+            windowSkipCount = 0;
         }
 
         private void RefreshScreens()
         {
+            int currentIndex = (cbScreens.SelectedItem as ScreenItem)?.Index ?? -1;
             cbScreens.Items.Clear();
             var screens = Screen.AllScreens;
             for (int i = 0; i < screens.Length; i++)
             {
                 cbScreens.Items.Add(new ScreenItem(i, screens[i]));
             }
-            if (cbScreens.Items.Count > 0)
+            if (currentIndex >= 0 && currentIndex < screens.Length)
             {
-                cbScreens.SelectedIndex = 0;
+                cbScreens.SelectedIndex = currentIndex;
+            }
+            else
+            {
+                EnsureValidScreenSelection(fallback: true);
             }
         }
 
         private void RefreshWindows()
         {
+            IntPtr currentHandle = (cbWindows.SelectedItem as WindowItem)?.Handle ?? IntPtr.Zero;
             cbWindows.Items.Clear();
             foreach (var win in EnumerateWindows())
             {
@@ -500,6 +567,17 @@ namespace TransparentScreenCapture
             }
             if (cbWindows.Items.Count > 0)
             {
+                if (currentHandle != IntPtr.Zero)
+                {
+                    for (int i = 0; i < cbWindows.Items.Count; i++)
+                    {
+                        if (cbWindows.Items[i] is WindowItem wi && wi.Handle == currentHandle)
+                        {
+                            cbWindows.SelectedIndex = i;
+                            return;
+                        }
+                    }
+                }
                 cbWindows.SelectedIndex = 0;
             }
         }
@@ -510,9 +588,12 @@ namespace TransparentScreenCapture
             EnumWindows((hWnd, lParam) =>
             {
                 if (!IsWindowVisible(hWnd)) return true;
+                if (IsToolWindow(hWnd)) return true;
                 var title = GetWindowTitle(hWnd);
                 if (string.IsNullOrWhiteSpace(title)) return true;
-                list.Add(new WindowItem(title, hWnd));
+                var processName = GetProcessNameForWindow(hWnd);
+                if (IsIrrelevantWindow(title, processName)) return true;
+                list.Add(new WindowItem(title, processName, hWnd));
                 return true;
             }, IntPtr.Zero);
             return list;
@@ -557,6 +638,106 @@ namespace TransparentScreenCapture
                 input = input.Replace(ch, '_');
             }
             return string.IsNullOrWhiteSpace(input) ? "Window" : input;
+        }
+
+        private bool EnsureValidScreenSelection(bool fallback)
+        {
+            var screens = Screen.AllScreens;
+            if (cbScreens.SelectedItem is ScreenItem item)
+            {
+                if (item.Index < screens.Length) return true;
+            }
+
+            if (screens.Length == 0) return false;
+
+            if (fallback)
+            {
+                cbScreens.SelectedIndex = 0;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void BeginWindowPick()
+        {
+            if (isPickingWindow) return;
+            isPickingWindow = true;
+            Cursor = Cursors.Cross;
+            pickHook = new LowLevelMouseHook();
+            pickHook.MouseDown += OnPickMouseDown;
+            pickHook.Install();
+        }
+
+        private void OnPickMouseDown(MouseButtons button)
+        {
+            if (!isPickingWindow) return;
+            isPickingWindow = false;
+            Cursor = Cursors.Default;
+            pickHook?.Uninstall();
+            pickHook = null;
+
+            if (!GetCursorPos(out POINT pt)) return;
+            IntPtr hWnd = WindowFromPoint(pt);
+            if (hWnd == IntPtr.Zero || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return;
+
+            var title = GetWindowTitle(hWnd);
+            var processName = GetProcessNameForWindow(hWnd);
+            if (IsIrrelevantWindow(title, processName)) return;
+
+            var item = new WindowItem(title, processName, hWnd);
+            // Add or select in list
+            for (int i = 0; i < cbWindows.Items.Count; i++)
+            {
+                if (cbWindows.Items[i] is WindowItem wi && wi.Handle == hWnd)
+                {
+                    cbWindows.SelectedIndex = i;
+                    return;
+                }
+            }
+            cbWindows.Items.Add(item);
+            cbWindows.SelectedItem = item;
+        }
+
+        private static bool IsIrrelevantWindow(string title, string processName)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return true;
+
+            string t = title.Trim();
+            if (t.StartsWith("#") && int.TryParse(t.TrimStart('#'), out _)) return true;
+
+            string[] ignoreTitles = { "Settings", "MainWindow", "Windows Input Experience" };
+            foreach (var it in ignoreTitles)
+            {
+                if (string.Equals(t, it, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            string[] ignoreProcesses = { "ApplicationFrameHost", "ShellExperienceHost", "TextInputHost", "SystemSettings" };
+            foreach (var p in ignoreProcesses)
+            {
+                if (string.Equals(processName, p, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsToolWindow(IntPtr hWnd)
+        {
+            int style = GetWindowLong(hWnd, GWL_EXSTYLE);
+            return (style & WS_EX_TOOLWINDOW) == WS_EX_TOOLWINDOW;
+        }
+
+        private static string GetProcessNameForWindow(IntPtr hWnd)
+        {
+            _ = GetWindowThreadProcessId(hWnd, out uint pid);
+            try
+            {
+                return Process.GetProcessById((int)pid).ProcessName;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -715,14 +896,17 @@ namespace TransparentScreenCapture
         public override string ToString() => $"Display {Index} ({Screen.Bounds.Width}x{Screen.Bounds.Height})";
     }
 
-    public record WindowItem(string Title, IntPtr Handle)
+    public record WindowItem(string Title, string ProcessName, IntPtr Handle)
     {
-        public override string ToString() => Title;
+        public override string ToString() => string.IsNullOrWhiteSpace(ProcessName) ? Title : $"{Title} — {ProcessName}";
     }
 
     internal static class NativeWindowInterop
     {
         public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_TOOLWINDOW = 0x00000080;
 
         [DllImport("user32.dll")]
         public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -745,6 +929,21 @@ namespace TransparentScreenCapture
 
         [DllImport("user32.dll")]
         public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, int nFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr WindowFromPoint(POINT Point);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -754,5 +953,12 @@ namespace TransparentScreenCapture
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
     }
 }
